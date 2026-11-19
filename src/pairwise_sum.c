@@ -403,14 +403,28 @@ int main(int argc, char **argv) {
     }
     build_distribution(n, size, counts, displs);
 
+    int *full = NULL;
+    if (rank == 0 && n > 0) {
+        full = alloc_ints(rank, n, "out of memory for the full array");
+        for (int i = 0; i < n; i++) {
+            full[i] = demo ? i + 1 : ELEMENT;
+        }
+    }
+
     int local_count = counts[rank];
     int *data = NULL;
-    if (local_count > 0) {
+    if (size == 1) {
+        data = full;
+        full = NULL;
+    } else if (local_count > 0) {
         data = alloc_ints(rank, local_count, "out of memory for the local block");
-        int origin = displs[rank];
-        for (int i = 0; i < local_count; i++) {
-            data[i] = demo ? origin + i + 1 : ELEMENT;
-        }
+    }
+    if (size > 1) {
+        int sink = 0;
+        MPI_Scatterv(full, counts, displs, MPI_INT,
+                     local_count > 0 ? data : &sink, local_count, MPI_INT,
+                     0, MPI_COMM_WORLD);
+        free(full);
     }
 
     int trace = demo && n > 0 && n <= TRACE_MAX;
